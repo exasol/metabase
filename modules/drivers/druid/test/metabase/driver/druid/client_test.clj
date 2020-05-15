@@ -41,16 +41,16 @@
                    :dbname         "test"
                    :host           "http://localhost"
                    :tunnel-enabled true
-                   :tunnel-port    22
+                   :tunnel-port    2222
                    :tunnel-user    "bogus"}]
       (is (thrown?
-           com.jcraft.jsch.JSchException
+           org.apache.sshd.common.SshException
            (try
              (tu.log/suppress-output
                (driver.u/can-connect-with-details? engine details :throw-exceptions))
              (catch Throwable e
                (loop [^Throwable e e]
-                 (or (when (instance? com.jcraft.jsch.JSchException e)
+                 (or (when (instance? org.apache.sshd.common.SshException e)
                        (throw e)
                        e)
                      (some-> (ex-cause e) recur))))))))))

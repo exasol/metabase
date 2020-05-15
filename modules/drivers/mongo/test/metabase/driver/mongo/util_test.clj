@@ -214,7 +214,7 @@
       .build))
 
 (expect
-  com.jcraft.jsch.JSchException
+  org.apache.sshd.common.SshException
   (try
     (let [engine :mongo
           details {:ssl            false
@@ -227,10 +227,11 @@
                    :tunnel-enabled true
                    :tunnel-port    22
                    :tunnel-user    "bogus"}]
+
       (tu.log/suppress-output
-        (driver.u/can-connect-with-details? engine details :throw-exceptions)))
+       (driver.u/can-connect-with-details? engine details :throw-exceptions)))
     (catch Throwable e
       (loop [^Throwable e e]
-        (or (when (instance? com.jcraft.jsch.JSchException e)
+        (or (when (instance? org.apache.sshd.common.SshException e)
               e)
             (some-> (.getCause e) recur))))))

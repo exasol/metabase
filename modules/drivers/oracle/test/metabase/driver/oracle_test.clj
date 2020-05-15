@@ -69,7 +69,7 @@
          (driver/humanize-connection-error-message :oracle (.getMessage e)))))
 
 (expect
-  com.jcraft.jsch.JSchException
+  org.apache.sshd.common.SshException
   (let [engine  :oracle
         details {:ssl            false
                  :password       "changeme"

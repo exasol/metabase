@@ -81,7 +81,7 @@
   (mt/test-driver :postgres
     (testing "Make sure invalid ssh credentials are detected if a direct connection is possible"
       (is (thrown?
-           com.jcraft.jsch.JSchException
+           org.apache.sshd.common.SshException
            (try
              ;; this test works if sshd is running or not
              (let [details {:dbname         "test"
@@ -100,7 +100,7 @@
                  (driver.u/can-connect-with-details? :postgres details :throw-exceptions)))
              (catch Throwable e
                (loop [^Throwable e e]
-                 (or (when (instance? com.jcraft.jsch.JSchException e)
+                 (or (when (instance? org.apache.sshd.common.SshException e)
                        (throw e))
                      (some-> (.getCause e) recur))))))))))
 
