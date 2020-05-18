@@ -17,9 +17,7 @@
             [metabase.driver.sql.query-processor :as sql.qp]
             [metabase.driver.sql.util.unprepare :as unprepare]
             [metabase.util
-             [date :as du]
-             [honeysql-extensions :as hx]
-             [ssh :as ssh]])
+             [honeysql-extensions :as hx]])
   (:import java.sql.Time
            [java.util Date UUID]))
 
@@ -30,9 +28,6 @@
 ;;; +----------------------------------------------------------------------------------------------------------------+
 
 (defmethod driver/display-name :exasol [_] "Exasol")
-
-(defmethod driver/date-interval :exasol [_ unit amount]
-  (hsql/raw (format "(NOW() + INTERVAL '%d %s')" (int amount) (name unit))))
 
 (defmethod driver/humanize-connection-error-message :exasol [_ message]
   (condp re-matches message
@@ -80,7 +75,10 @@
 
 (def ^:private extract-integer (comp hx/->integer extract))
 
-(def ^:private ^:const one-day (hsql/raw "INTERVAL '1 day'"))
+(def ^:private ^:const one-day (hsql/raw "INTERVAL '1' day"))
+
+(defmethod sql.qp/add-interval-honeysql-form :exasol [_ hsql-form amount unit]
+  (hsql/raw (format "(NOW() + INTERVAL '%d' %s)" (int amount) (name unit))))
 
 (defmethod sql.qp/date [:exasol :default]        [_ _ expr] expr)
 (defmethod sql.qp/date [:exasol :minute]         [_ _ expr] (date-trunc :minute expr))
