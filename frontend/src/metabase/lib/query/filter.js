@@ -68,7 +68,10 @@ export function isSegmentFilter(filter: FilterClause): boolean {
 }
 
 export function isCompoundFilter(filter: FilterClause): boolean {
-  return Array.isArray(filter) && (filter[0] === "and" || filter[0] === "or");
+  return (
+    Array.isArray(filter) &&
+    (filter[0] === "and" || filter[0] === "or" || filter[0] === "not")
+  );
 }
 
 export function isFieldFilter(filter: FilterClause): boolean {
@@ -78,12 +81,12 @@ export function isFieldFilter(filter: FilterClause): boolean {
 // TODO: is it safe to assume if the last item is an object then it's options?
 export function hasFilterOptions(filter: Filter): boolean {
   const o = filter[filter.length - 1];
-  return !!o && typeof o == "object" && o.constructor == Object;
+  return !!o && typeof o == "object" && o.constructor === Object;
 }
 
 export function getFilterOptions(filter: Filter): FilterOptions {
   // NOTE: just make a new "any" variable since getting flow to type checking this is a nightmare
-  let _filter: any = filter;
+  const _filter: any = filter;
   if (hasFilterOptions(filter)) {
     return _filter[_filter.length - 1];
   } else {
