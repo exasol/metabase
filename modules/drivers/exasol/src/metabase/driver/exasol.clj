@@ -18,8 +18,8 @@
             [metabase.driver.sql.util.unprepare :as unprepare]
             [metabase.util
              [honeysql-extensions :as hx]])
-  (:import java.sql.Time
-           [java.util Date UUID]))
+  (:import [java.sql Date Timestamp ResultSet ResultSetMetaData Types]
+           [java.util UUID]))
 
 (driver/register! :exasol, :parent :sql-jdbc)
 
@@ -147,3 +147,14 @@
 
 (defmethod sql-jdbc.execute/set-timezone-sql :exasol [_]
   "ALTER SESSION SET time_zone = %s;")
+
+;; try to fake LocalDateTime with java.sql.Timestamp
+(defmethod sql-jdbc.execute/read-column-thunk [:exasol Types/TIMESTAMP]
+  [_ ^ResultSet rs ^ResultSetMetaData rsmeta ^Integer i]
+  (fn read-datetime-thunk []
+    (.toLocalDateTime (.getObject rs i Timestamp))))
+
+(defmethod sql-jdbc.execute/read-column-thunk [:exasol Types/DATE]
+  [_ ^ResultSet rs ^ResultSetMetaData rsmeta ^Integer i]
+  (fn read-datetime-thunk []
+    (.toLocalDate (.getObject rs i Date))))
