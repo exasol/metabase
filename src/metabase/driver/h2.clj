@@ -33,6 +33,7 @@
 
 (defmethod driver/supports? [:h2 :full-join] [_ _] false)
 (defmethod driver/supports? [:h2 :regex] [_ _] false)
+(defmethod driver/supports? [:h2 :percentile-aggregations] [_ _] false)
 
 (defmethod driver/connection-properties :h2
   [_]
@@ -179,6 +180,10 @@
                                                         3)
                                                   2))))
 
+(defmethod sql.qp/->honeysql [:h2 :log]
+  [driver [_ field]]
+  (hsql/call :log10 (sql.qp/->honeysql driver field)))
+
 
 ;;; +----------------------------------------------------------------------------------------------------------------+
 ;;; |                                         metabase.driver.sql-jdbc impls                                         |
@@ -297,7 +302,8 @@
 ;; de-CLOB any CLOB values that come back
 (defmethod sql-jdbc.execute/read-column-thunk :h2
   [_ ^ResultSet rs ^ResultSetMetaData rsmeta ^Integer i]
-  (let [classname (Class/forName (.getColumnClassName rsmeta i) true (classloader/the-classloader))]
+  (let [classname (some-> (.getColumnClassName rsmeta i)
+                          (Class/forName true (classloader/the-classloader)))]
     (if (isa? classname Clob)
       (fn []
         (jdbc-protocols/clob->str (.getObject rs i)))

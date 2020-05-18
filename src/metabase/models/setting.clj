@@ -15,8 +15,8 @@
 
        (require '[metabase.models.setting :as setting])
 
-       (setting/get :mandrill-api-key)           ; only returns values set explicitly from SuperAdmin
-       (mandrill-api-key)                        ; returns value set in SuperAdmin, OR value of corresponding env var,
+       (setting/get :mandrill-api-key)           ; only returns values set explicitly from the Admin Panel
+       (mandrill-api-key)                        ; returns value set in the Admin Panel, OR value of corresponding env var,
                                                  ; OR the default value, if any (in that order)
 
        (setting/set! :mandrill-api-key \"NEW_KEY\")
@@ -501,7 +501,7 @@
      (mandrill-api-key new-value) ; update the value
      (mandrill-api-key nil)       ; delete the value
 
-   A setting can be set from the SuperAdmin page or via the corresponding env var, eg. `MB_MANDRILL_API_KEY` for the
+   A setting can be set from the Admin Panel or via the corresponding env var, eg. `MB_MANDRILL_API_KEY` for the
    example above.
 
    You may optionally pass any of the OPTIONS below:
@@ -512,7 +512,8 @@
                       Settings have special default getters and setters that automatically coerce values to the correct
                       types.
 
-   *  `:visibility` - `:public`, `:authenticated`, `:admin` (default), or :internal. Controls where this setting is visible
+   *  `:visibility` - `:public`, `:authenticated`, `:admin` (default), or `:internal`. Controls where this setting is
+                      visible
 
    *  `:getter`     - A custom getter fn, which takes no arguments. Overrides the default implementation. (This can in
                       turn call functions in this namespace like `get-string` or `get-boolean` to invoke the default

@@ -170,6 +170,11 @@ executors:
           ACCEPT_EULA: Y
           SA_PASSWORD: 'P@ssw0rd'
 
+  fe-mongo:
+    working_directory: /home/circleci/metabase/metabase/
+    docker:
+      - image: circleci/clojure:lein-2.8.1-node-browsers
+      - image: circleci/mongo:4.0
 
 
 ########################################################################################################################
@@ -279,9 +284,16 @@ jobs:
             done;
             echo `md5sum yarn.lock` >> frontend-checksums.txt
             echo `md5sum webpack.config.js` >> frontend-checksums.txt
+      # As well as driver modules (database drivers)
+      - run:
+          name: Generate checksums of all driver module source files to use as Uberjar cache key
+          command: >
+            for file in `find ./modules -type f | sort`;
+              do echo `md5sum $file` >> modules-checksums.txt;
+            done;
       - run:
           name: Save last git commit message
-          command: git log -1 --oneline > commit.txt
+          command: git log -1 > commit.txt
       - run:
           name: Remove .git directory (not needed for tests)
           command: rm -rf /home/circleci/metabase/metabase/.git
@@ -332,7 +344,7 @@ jobs:
     steps:
       - attach-workspace
       - restore-be-deps-cache
-      - run: lein with-profile +include-all-drivers deps
+      - run: lein with-profile +include-all-drivers,+cloverage,+junit deps
       - save_cache:
           key: be-deps-v2-{{ checksum "project.clj" }}
           paths:
@@ -343,23 +355,25 @@ jobs:
       e:
         type: executor
         default: clojure
+      before-steps:
+        type: steps
+        default: []
       lein-command:
         type: string
-      store-results:
-        type: boolean
-        default: false
+      after-steps:
+        type: steps
+        default: []
     executor: << parameters.e >>
     steps:
       - attach-workspace
       - restore-be-deps-cache
+      - steps: << parameters.before-steps >>
       - run:
           command: lein with-profile +ci << parameters.lein-command >>
           no_output_timeout: 5m
-      - when:
-          condition: << parameters.store-results >>
-          steps:
-            - store_test_results:
-                path: /home/circleci/metabase/metabase/target/test
+      - steps: << parameters.after-steps >>
+      - store_test_results:
+          path: /home/circleci/metabase/metabase/target/junit
 
   be-linter-reflection-warnings:
     executor: clojure
@@ -404,7 +418,7 @@ jobs:
                   DRIVERS: h2,<< parameters.driver >>
                 command: >
                   /home/circleci/metabase/metabase/.circleci/skip-driver-tests.sh << parameters.driver >> ||
-                  lein with-profile +ci test
+                  lein with-profile +ci,+junit test
                 no_output_timeout: << parameters.timeout >>
       # This is exactly the same as without auto-retry but will try running the tests a second time if they fail
       - when:
@@ -416,7 +430,7 @@ jobs:
                   DRIVERS: h2,<< parameters.driver >>
                 command: >
                   /home/circleci/metabase/metabase/.circleci/skip-driver-tests.sh << parameters.driver >> ||
-                  lein with-profile +ci test || lein with-profile +ci test
+                  lein with-profile +ci,+junit test || lein with-profile +ci,+junit test
                 no_output_timeout: << parameters.timeout >>
 
   test-migrate-from-h2:
@@ -530,18 +544,18 @@ jobs:
       - restore-be-deps-cache
       - restore_cache:
           keys:
-            - uberjar-{{ checksum "./backend-checksums.txt" }}-{{ checksum "./frontend-checksums.txt" }}
+            - uberjar-{{ checksum "./backend-checksums.txt" }}-{{ checksum "./frontend-checksums.txt" }}-{{ checksum "./modules-checksums.txt" }}
       - run:
           name: Build uberjar if needed
           command: >
             if [ ! -f './target/uberjar/metabase.jar' ];
-              then ./bin/build version frontend uberjar;
+              then ./bin/build version frontend drivers uberjar;
             fi
-          no_output_timeout: 5m
+          no_output_timeout: 10m
       - store_artifacts:
           path: /home/circleci/metabase/metabase/target/uberjar/metabase.jar
       - save_cache:
-          key: uberjar-{{ checksum "./backend-checksums.txt" }}-{{ checksum "./frontend-checksums.txt" }}
+          key: uberjar-{{ checksum "./backend-checksums.txt" }}-{{ checksum "./frontend-checksums.txt" }}-{{ checksum "./modules-checksums.txt" }}
           paths:
             - /home/circleci/metabase/metabase/target/uberjar/metabase.jar
 
@@ -560,11 +574,28 @@ jobs:
                 command: ./bin/build version
 
   fe-tests-cypress:
-    executor: clojure-and-node
+    parameters:
+      e:
+        type: executor
+        default: clojure-and-node
+      cypress-group:
+        type: string
+      only-single-database:
+        type: boolean
+        default: false
+      test-files-location:
+        type: string
+        default: ""
+      driver:
+        type: string
+        default: ""
+    executor: << parameters.e >>
+    environment:
+      CYPRESS_GROUP:  << parameters.cypress-group >>
     steps:
       - run-yarn-command:
           command-name: Run Cypress tests
-          command: run test-cypress-no-build
+          command: run test-cypress-no-build <<# parameters.only-single-database >> --testFiles << parameters.test-files-location >> <</ parameters.only-single-database >>
           before-steps:
             - restore_cache:
                 keys:
@@ -615,14 +646,14 @@ workflows:
           name: be-tests
           requires:
             - be-deps
-          lein-command: test
+          lein-command: with-profile +junit test
 
       - lein:
           name: be-tests-java-11
           requires:
             - be-deps
           e: java-11
-          lein-command: test
+          lein-command: with-profile +junit test
 
       - lein:
           name: be-linter-eastwood
@@ -647,6 +678,16 @@ workflows:
           requires:
             - be-deps
           lein-command: bikeshed
+
+      - lein:
+          name: be-linter-cloverage
+          requires:
+            - be-deps
+          lein-command: cloverage --codecov
+          after-steps:
+            - run:
+                name: Upload code coverage to codecov.io
+                command: bash <(curl -s https://codecov.io/bash)
 
       - be-linter-reflection-warnings:
           requires:
@@ -847,10 +888,42 @@ workflows:
           requires:
             - build-uberjar
             - fe-deps
+
       - fe-tests-cypress:
+          name: fe-tests-cypress-1
           requires:
             - build-uberjar
             - fe-deps
+          cypress-group: "default"
+      - fe-tests-cypress:
+          name: fe-tests-cypress-2
+          requires:
+            - build-uberjar
+            - fe-deps
+          cypress-group: "default"
+      - fe-tests-cypress:
+          name: fe-tests-cypress-3
+          requires:
+            - build-uberjar
+            - fe-deps
+          cypress-group: "default"
+      - fe-tests-cypress:
+          name: fe-tests-cypress-4
+          requires:
+            - build-uberjar
+            - fe-deps
+          cypress-group: "default"
+
+      - fe-tests-cypress:
+          name: fe-tests-cypress-mongo
+          requires:
+            - build-uberjar
+            - fe-deps
+          e: fe-mongo
+          cypress-group: "mongo"
+          driver: mongo
+          only-single-database: true
+          test-files-location: frontend/test/metabase-db/mongo
 
       - deploy-master:
           requires:
@@ -858,6 +931,7 @@ workflows:
             - verify-i18n-files
 
             - be-linter-bikeshed
+            - be-linter-cloverage
             - be-linter-docstring-checker
             - be-linter-eastwood
             - be-linter-namespace-decls
